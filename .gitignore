@@ -1,0 +1,88 @@
+# Black friday
+library(rpart)
+
+set.seed(23)
+
+path_train <- "/home/sanket/Sanket/Competitions/Black Friday/train.csv"
+path_test <- "/home/sanket/Sanket/Competitions/Black Friday/test.csv"
+
+train <- read.csv(path_train , header = T)
+test <- read.csv(path_test , header = T)
+
+train$data <- 1
+test$Purchase <- 0
+test$data <- 0
+
+total <- rbind(train,test)
+
+for (i in 1:11)
+{
+  total[,i] <- as.factor(total[,i])
+  
+}
+
+train.notmar <- total[total$Marital_Status == 0 ,] 
+train.notmar <- train.notmar[train.notmar$data == 1,]
+test.notmar <- total[total$data == 0 ,]
+
+test.notmar$Purchase <- NULL
+test.notmar$data <- NULL
+
+# train.notmar[is.na(train.notmar)] <- -1 
+train.notmar$data <- NULL
+
+nam <- names(train)
+
+model <- rpart(Purchase ~ .,data = train.notmar)
+pred_tree <- predict(model, test.notmar)
+
+submit <- data.frame(User_ID = test$User_ID,
+                     Product_ID = test$Product_ID,
+                     Purchase = pred_tree)
+
+# XGboost
+
+library(data.table)
+library(xgboost)
+
+for (i in 1:12)
+{
+  train.notmar[,i] <-  as.numeric(train.notmar[,i])
+}
+
+for (i in 1:11)
+{
+  test.notmar[,i] <-  as.numeric(test.notmar[,i])
+}
+
+
+X_features <- c( "User_ID" , "Product_ID" , "Gender" ,                   
+                 "Age" , "Occupation" ,  "City_Category" ,           
+                 "Stay_In_Current_City_Years" , "Product_Category_1" ,       
+                 "Product_Category_2" , "Product_Category_3")
+X_target <- train.notmar$Purchase
+
+xgtrain <- xgb.DMatrix(data <- as.matrix(train.notmar[, X_features]), label = X_target, missing <- NA)
+xgtest <- xgb.DMatrix(data <- as.matrix(test.notmar[, X_features]), missing = NA)
+
+
+params <- list()
+params$objective <- "reg:linear"
+params$eta <- 0.23
+params$max_depth <- 10
+params$subsample <- 1
+params$colsample_bytree <- 1
+params$min_child_weight <- 2
+params$eval_metric <- "rmse"
+
+model_xgb <- xgb.train(params <- params, xgtrain, nrounds <- 100)
+
+#vimp <- xgb.importance(model <- model_xgb, feature_names = X_features)
+
+pred_boost <- predict(model_xgb, xgtest)
+
+#Submission
+submit$Purchase_boosted <- pred_boost 
+Final_submit <- submit
+Final_submit$Purchase_1 <- (submit$Purchase + 2 * submit$Purchase_boosted)/3
+write.csv(Final_submit[,-c(3,4)], "Submission.csv", row.names = FALSE)
