@@ -3,6 +3,7 @@ library(rpart)
 
 set.seed(23)
 
+#loading data
 path_train <- "/home/sanket/Sanket/Competitions/Black Friday/train.csv"
 path_test <- "/home/sanket/Sanket/Competitions/Black Friday/test.csv"
 
@@ -18,7 +19,6 @@ total <- rbind(train,test)
 for (i in 1:11)
 {
   total[,i] <- as.factor(total[,i])
-  
 }
 
 train.notmar <- total[total$Marital_Status == 0 ,] 
@@ -27,11 +27,12 @@ test.notmar <- total[total$data == 0 ,]
 
 test.notmar$Purchase <- NULL
 test.notmar$data <- NULL
-
-# train.notmar[is.na(train.notmar)] <- -1 
 train.notmar$data <- NULL
 
-nam <- names(train)
+# train.notmar[is.na(train.notmar)] <- -1 
+#nam <- names(train)
+
+#Decision Tree
 
 model <- rpart(Purchase ~ .,data = train.notmar)
 pred_tree <- predict(model, test.notmar)
@@ -42,7 +43,6 @@ submit <- data.frame(User_ID = test$User_ID,
 
 # XGboost
 
-library(data.table)
 library(xgboost)
 
 for (i in 1:12)
@@ -55,17 +55,17 @@ for (i in 1:11)
   test.notmar[,i] <-  as.numeric(test.notmar[,i])
 }
 
-
+#Features 
 X_features <- c( "User_ID" , "Product_ID" , "Gender" ,                   
                  "Age" , "Occupation" ,  "City_Category" ,           
                  "Stay_In_Current_City_Years" , "Product_Category_1" ,       
                  "Product_Category_2" , "Product_Category_3")
 X_target <- train.notmar$Purchase
 
-xgtrain <- xgb.DMatrix(data <- as.matrix(train.notmar[, X_features]), label = X_target, missing <- NA)
+xgtrain <- xgb.DMatrix(data <- as.matrix(train.notmar[, X_features]), label = X_target, missing = NA)
 xgtest <- xgb.DMatrix(data <- as.matrix(test.notmar[, X_features]), missing = NA)
 
-
+#Setting Parameters
 params <- list()
 params$objective <- "reg:linear"
 params$eta <- 0.23
@@ -75,15 +75,20 @@ params$colsample_bytree <- 1
 params$min_child_weight <- 2
 params$eval_metric <- "rmse"
 
+#Model building 
 model_xgb <- xgb.train(params <- params, xgtrain, nrounds <- 100)
 
-#vimp <- xgb.importance(model <- model_xgb, feature_names = X_features)
+#checking important Features
+vimp <- xgb.importance(model <- model_xgb, feature_names = X_features)
 
+#Predicting 
 pred_boost <- predict(model_xgb, xgtest)
 
 #Submission
 submit$Purchase_boosted <- pred_boost 
 Final_submit <- submit
+
+#Weighted Average of Decision tree and Boosting
 Final_submit$Purchase_1 <- (submit$Purchase + 2 * submit$Purchase_boosted)/3
 write.csv(Final_submit[,-c(3,4)], "Submission.csv", row.names = FALSE)
 
